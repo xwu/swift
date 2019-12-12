@@ -399,6 +399,7 @@ public extension Differentiable {
 
 // Transpose
 
+/*
 @inlinable
 public func transpose<T, R>(
   of body: @escaping @differentiable(linear) (T) -> R
@@ -407,6 +408,8 @@ public func transpose<T, R>(
   let transpose = { x in Builtin.applyTranspose_arity1(body, x) }
   return Builtin.linearFunction_arity1(transpose, original)
 }
+// Assertion failed: (!isGuaranteedForwardingInst(i) && "Should have forwarding visitor for all ownership forwarding " "instructions"), function visitSILInstruction, file /Users/danielzheng/swift-merge/swift/lib/SILOptimizer/Mandatory/SemanticARCOpts.cpp, line 220.
+*/
 
 // Value with differential
 

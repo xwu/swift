@@ -286,7 +286,9 @@ CanSILFunctionType SILFunctionType::getAutoDiffDerivativeFunctionType(
   // Given a type, returns its formal SIL parameter info.
   auto getTangentParameterInfoForOriginalResult = [&](
       CanType tanType, ResultConvention origResConv) -> SILParameterInfo {
-    auto &tl = TC.getTypeLowering(tanType, TypeExpansionContext::minimal());
+    AbstractionPattern pattern(derivativeFnGenSig, tanType);
+    auto &tl = TC.getTypeLowering(pattern, tanType,
+                                  TypeExpansionContext::minimal());
     ParameterConvention conv;
     switch (origResConv) {
     case ResultConvention::Owned:
@@ -309,8 +311,9 @@ CanSILFunctionType SILFunctionType::getAutoDiffDerivativeFunctionType(
   // Given a type, returns its formal SIL result info.
   auto getTangentResultInfoForOriginalParameter = [&](
       CanType tanType, ParameterConvention origParamConv) -> SILResultInfo {
-    auto &tl =
-        TC.getTypeLowering(tanType, TypeExpansionContext::minimal());
+    AbstractionPattern pattern(derivativeFnGenSig, tanType);
+    auto &tl = TC.getTypeLowering(pattern, tanType,
+                                  TypeExpansionContext::minimal());
     ResultConvention conv;
     switch (origParamConv) {
     case ParameterConvention::Direct_Owned:
@@ -383,7 +386,21 @@ CanSILFunctionType SILFunctionType::getAutoDiffDerivativeFunctionType(
 
   SmallVector<SILParameterInfo, 4> newParameters;
   newParameters.reserve(getNumParameters());
+  // TODO(TF-1050): Find a robust fix.
   newParameters.append(getParameters().begin(), getParameters().end());
+#if 0
+  for (auto param : getParameters()) {
+    // NOTE(TF-1050): Map archetypes out of context to use interface type.
+    // This fixed some verification errors. Is this correct?
+    auto paramType = param.getInterfaceType();
+    if (paramType->hasArchetype()) {
+      auto interfaceType = paramType->mapTypeOutOfContext()->getCanonicalType();
+      newParameters.push_back(param.getWithInterfaceType(interfaceType));
+      continue;
+    }
+    newParameters.push_back(param);
+  }
+#endif
   // Reabstraction thunks have a function-typed parameter (the function to
   // reabstract) as their last parameter. Reabstraction thunk JVPs/VJPs have a
   // `@differentiable` function-typed last parameter instead.
@@ -399,13 +416,35 @@ CanSILFunctionType SILFunctionType::getAutoDiffDerivativeFunctionType(
   }
   SmallVector<SILResultInfo, 4> newResults;
   newResults.reserve(getNumResults() + 1);
+  // TODO(TF-1050): Find a robust fix.
   for (auto &result : getResults()) {
     auto mappedResult = result.getWithInterfaceType(
         result.getInterfaceType()->getCanonicalType(derivativeFnGenSig));
     newResults.push_back(mappedResult);
   }
+#if 0
+  for (auto &result : getResults()) {
+    // NOTE(TF-1050): Map archetypes out of context to use interface type.
+    // This fixed some verification errors. Is this correct?
+    auto resultType = result.getInterfaceType();
+    if (resultType->hasArchetype()) {
+      auto interfaceType =
+          resultType->mapTypeOutOfContext()->getCanonicalType();
+      newResults.push_back(result.getWithInterfaceType(interfaceType));
+      continue;
+    }
+    newResults.push_back(result);
+  }
+#endif
+  // TODO(TF-1050): Find a robust fix.
   newResults.push_back({closureType->getCanonicalType(derivativeFnGenSig),
                         ResultConvention::Owned});
+#if 0
+  auto canClosureType = closureType->getCanonicalType(derivativeFnGenSig);
+  if (canClosureType->hasArchetype())
+    canClosureType = canClosureType->mapTypeOutOfContext()->getCanonicalType();
+  newResults.push_back({canClosureType, ResultConvention::Owned});
+#endif
   return SILFunctionType::get(
       derivativeFnGenSig, getExtInfo(), getCoroutineKind(),
       getCalleeConvention(), newParameters, getYields(), newResults,
@@ -416,7 +455,7 @@ CanSILFunctionType SILFunctionType::getAutoDiffDerivativeFunctionType(
 CanSILFunctionType SILFunctionType::getAutoDiffTransposeFunctionType(
     IndexSubset *parameterIndices, Lowering::TypeConverter &TC,
     LookupConformanceFn lookupConformance, CanGenericSignature genSig) {
-  // Get the canonical derivative function generic signature.
+  // Get the canonical transpose function generic signature.
   if (!genSig)
     genSig = getSubstGenericSignature();
   genSig = getAutoDiffDerivativeFunctionGenericSignature(
@@ -425,8 +464,9 @@ CanSILFunctionType SILFunctionType::getAutoDiffTransposeFunctionType(
   // Given a type, returns its formal SIL parameter info.
   auto getParameterInfoForOriginalResult = [&](
       const SILResultInfo &result) -> SILParameterInfo {
-    auto &tl = TC.getTypeLowering(
-        result.getInterfaceType(), TypeExpansionContext::minimal());
+    AbstractionPattern pattern(genSig, result.getInterfaceType());
+    auto &tl = TC.getTypeLowering(pattern, result.getInterfaceType(),
+                                  TypeExpansionContext::minimal());
     ParameterConvention newConv;
     switch (result.getConvention()) {
     case ResultConvention::Owned:
@@ -449,8 +489,9 @@ CanSILFunctionType SILFunctionType::getAutoDiffTransposeFunctionType(
   // Given a type, returns its formal SIL result info.
   auto getResultInfoForOriginalParameter = [&](
       const SILParameterInfo &param) -> SILResultInfo {
-    auto &tl = TC.getTypeLowering(
-        param.getInterfaceType(), TypeExpansionContext::minimal());
+    AbstractionPattern pattern(genSig, param.getInterfaceType());
+    auto &tl = TC.getTypeLowering(pattern, param.getInterfaceType(),
+                                  TypeExpansionContext::minimal());
     ResultConvention newConv;
     switch (param.getConvention()) {
     case ParameterConvention::Direct_Owned:
@@ -484,7 +525,8 @@ CanSILFunctionType SILFunctionType::getAutoDiffTransposeFunctionType(
   return SILFunctionType::get(
       genSig, getExtInfo(), getCoroutineKind(),
       getCalleeConvention(), newParameters, getYields(), newResults,
-      getOptionalErrorResult(), getSubstitutions(), isGenericSignatureImplied(), getASTContext());
+      getOptionalErrorResult(), getSubstitutions(), isGenericSignatureImplied(),
+      getASTContext());
 }
 
 ClassDecl *

@@ -268,14 +268,14 @@ namespace {
       auto jvpTy = origTy->getAutoDiffDerivativeFunctionType(
           type->getDifferentiationParameterIndices(), /*resultIndex*/ 0,
           AutoDiffDerivativeFunctionKind::JVP, TC,
-          LookUpConformanceInModule(&M));
+          LookUpConformanceInModule(&M), origType.getGenericSignature());
       auto vjpTy = origTy->getAutoDiffDerivativeFunctionType(
           type->getDifferentiationParameterIndices(), /*resultIndex*/ 0,
           AutoDiffDerivativeFunctionKind::VJP, TC,
-          LookUpConformanceInModule(&M));
+          LookUpConformanceInModule(&M), origType.getGenericSignature());
       RecursiveProperties props;
-      // TODO(TF-1050): Fix `AbstractionPattern` argument to `classifyType`
-      // calls.
+      // TODO(TF-1050): We may need to fix `AbstractionPattern` argument to
+      // `classifyType`.
       props.addSubobject(classifyType(origType, origTy, TC, Expansion));
       props.addSubobject(classifyType(origType, jvpTy, TC, Expansion));
       props.addSubobject(classifyType(origType, vjpTy, TC, Expansion));
@@ -289,10 +289,10 @@ namespace {
       auto origTy = type->getWithoutDifferentiability();
       auto transTy = origTy->getAutoDiffTransposeFunctionType(
           type->getDifferentiationParameterIndices(), TC,
-          LookUpConformanceInModule(&M));
+          LookUpConformanceInModule(&M), origType.getGenericSignature());
       RecursiveProperties props;
-      // TODO(TF-1050): Fix `AbstractionPattern` argument to `classifyType`
-      // calls.
+      // TODO(TF-1050): We may need to fix `AbstractionPattern` argument to
+      // `classifyType`.
       props.addSubobject(classifyType(origType, origTy, TC, Expansion));
       props.addSubobject(classifyType(origType, transTy, TC, Expansion));
       return props;
